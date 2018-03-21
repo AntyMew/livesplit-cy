@@ -65,6 +65,8 @@ class BuildCoreCommand(Command):
 
         source = "extern/livesplit-core/target/release/liblivesplit_core.a"
         target = "lib/liblivesplit_core.a"
+        if not os.path.isdir("lib"):
+            os.mkdir("lib")
         if sys.platform != "win32":
             if not os.path.exists(target):
                 os.symlink("../" + source, target)
