@@ -1,0 +1,4 @@
+[submodule "extern/livesplit-core"]
+	path = extern/livesplit-core
+	url = https://github.com/AntyMew/livesplit-core.git
+	branch = feature/capi-extensions

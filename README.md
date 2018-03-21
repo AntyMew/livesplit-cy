@@ -10,12 +10,17 @@ Usage and API documentation is on hold pending a more final release. As of versi
 
 ## Building:
 
-`python setup.py build_ext`
+1. `python setup.py build_core`
+   * Compiles livesplit-core and generates C headers. Depends on Rust
+2. `python setup.py build_ext`
+
+Note that `build_core` only needs to be called once to initialize the repo until the livesplit-core module is updated.
 
 ### Dependencies:
 
 * setuptools
 * Cython
+* Rust: rustc, Cargo
 
 ## Contributing:
 
