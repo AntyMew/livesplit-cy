@@ -1,3 +1,4 @@
-__all__ = ["component"]
+__all__ = ["Component", "Layout"]
 
-from . import component
+from livesplit_cy.layout.component import Component
+from livesplit_cy.layout.layout import Layout

@@ -1,4 +1,4 @@
-__all__ = ["shared_timer", "timer"]
+__all__ = ["SharedTimer", "Timer"]
 
-from . import shared_timer
-from . import timer
+from livesplit_cy.timer.shared_timer import SharedTimer
+from livesplit_cy.timer.timer import Timer

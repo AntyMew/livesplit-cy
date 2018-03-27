@@ -14,7 +14,7 @@ Usage and API documentation is on hold pending a more final release. As of versi
    * Compiles livesplit-core and generates C headers. Depends on Rust
 2. `python setup.py build_ext`
 
-Note that `build_core` only needs to be called once to initialize the repo until the livesplit-core module is updated.
+Note that `build_core` only needs to be run once to initialize the repo until the livesplit-core module is updated.
 
 ### Dependencies:
 
@@ -27,6 +27,8 @@ Note that `build_core` only needs to be called once to initialize the repo until
 Pull requests welcome! Just fork the project, make your changes, and PR to `master`. c:
 
 If you are making only small changes, feel free to commit to your fork's `master`. If you are developing a larger feature, it would be appreciated if you instead commit your changes to a descriptively named feature branch, ex. `feature/current-pace-component`.
+
+Additionally, if and when you pull new changes from this repository after you've made local changes, please prefer rebasing over merging, i.e. with `git pull --rebase`. Of course, if you have already pushed the changes to a remote, then you should merge as usual.
 
 ### Linting:
 

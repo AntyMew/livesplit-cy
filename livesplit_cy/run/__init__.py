@@ -1,3 +1,3 @@
-__all__ = ["run"]
+__all__ = ["Run"]
 
-from . import run
+from livesplit_cy.run.run import Run

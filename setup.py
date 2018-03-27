@@ -2,94 +2,163 @@
 import os
 import subprocess
 import sys
+
 from distutils.cmd import Command
-from setuptools import setup, find_packages
+from distutils.log import INFO, ERROR
+from distutils.spawn import find_executable
+
+from setuptools import setup
 from setuptools.extension import Extension
-from Cython.Build import cythonize
-
-
-def where(file):
-    """Check PATH environment variable for an executable file."""
-    for path in os.environ["PATH"].split(os.pathsep):
-        file_path = os.path.join(path, file)
-        if os.path.isfile(file_path) and os.access(file_path, os.X_OK):
-            return file_path
-    return None
 
 
 class BuildCoreCommand(Command):
-    """Command to build all contained submodules."""
+    """Command to build the livesplit-core submodule."""
 
-    description = "build all submodules"
+    description = "build livesplit-core submodule"
     user_options = [
         ("cargo-path=", None, "path to cargo")
     ]
 
-    FILE_NOT_FOUND = "file '{}' not found"
-    NOT_EXECUTABLE = "file '{}' is not executable"
     PATH_NOT_FOUND = "cargo not found"
-    CORE_NOT_FOUND = ("livesplit-core not found. Have you pulled all"
-                      "submodules?\n\t(git submodule update --init"
+    NOT_EXECUTABLE = "cargo found on path is not executable"
+    CORE_NOT_FOUND = ("livesplit-core not found. Have you initialized its "
+                      "submodule?\n\t(git submodule update --init "
                       "--recursive)")
+
+    SUBMODULE_PATH = os.path.join("extern", "livesplit-core")
+    MANIFEST_PATH = os.path.join(SUBMODULE_PATH, "Cargo.toml")
+    RELEASE_PATH = os.path.join(SUBMODULE_PATH, "target", "release")
+    BINDINGS_PATH = os.path.join(SUBMODULE_PATH, "capi", "bindings")
+
+    BUILD_ARGS = [
+        "build", "--manifest-path", MANIFEST_PATH, "--release", "-p",
+        "staticlib"
+    ]
+    RUN_ARGS = [
+        "run", "--manifest-path", MANIFEST_PATH, "-p", "bindings", "--", "c",
+        "-o", BINDINGS_PATH
+    ]
 
     def initialize_options(self):
         """Initialize default path."""
-        self.cargo_path = None
+        self.cargo_path = "cargo"
 
     def finalize_options(self):
-        """Check for cargo executable, otherwise search for it on PATH."""
-        manual_path = self.cargo_path
-        self.cargo_path = manual_path or "cargo"
-        if sys.platform == "win32" and not self.cargo_path.endswith(".exe"):
-            self.cargo_path += ".exe"
-        if manual_path:
-            if not os.path.isfile(self.cargo_path):
-                raise IOError(self.FILE_NOT_FOUND.format(self.cargo_path))
-            elif not os.access(self.cargo_path):
-                raise IOError(self.NOT_EXECUTABLE.format(self.cargo_path))
-        else:
-            self.cargo_path = where(self.cargo_path)
-            if not self.cargo_path:
-                raise Exception(self.PATH_NOT_FOUND.format(self.cargo_path))
+        """Confirm cargo executable is available and submodule is loaded."""
+        path = find_executable(self.cargo_path)
+        if not path:
+            raise IOError(self.PATH_NOT_FOUND)
+        elif not os.access(path, os.X_OK):
+            raise IOError(self.NOT_EXECUTABLE)
         if not os.path.isdir("extern/livesplit-core"):
             raise Exception(self.CORE_NOT_FOUND)
 
     def run(self):
         """Run command."""
-        manifest_arg = ["--manifest-path", "extern/livesplit-core/Cargo.toml"]
-
-        command = ([self.cargo_path, "build"] + manifest_arg +
-                   ["--release", "-p", "staticlib"])
-        self.announce("building livesplit-core", level=2)
-        subprocess.check_call(command)
-
-        source = "extern/livesplit-core/target/release/liblivesplit_core.a"
-        target = "lib/liblivesplit_core.a"
-        if not os.path.isdir("lib"):
-            os.mkdir("lib")
-        if sys.platform != "win32":
-            if not os.path.exists(target):
-                os.symlink("../" + source, target)
-        else:
-            import shutil
-            shutil.copy(source, target)
-
-        command = ([self.cargo_path, "run"] + manifest_arg +
-                   ["-p", "bindings", "--", "c", "-o", "include"])
-        self.announce("generating c bindings", level=2)
-        subprocess.check_call(command)
+        def cargo_command(args):
+            command = [self.cargo_path] + args
+            subprocess.check_call(command)
+        try:
+            self.announce("building livesplit-core", level=INFO)
+            cargo_command(self.BUILD_ARGS)
+            self.announce("generating c bindings", level=INFO)
+            cargo_command(self.RUN_ARGS)
+        except subprocess.CalledProcessError:
+            self.announce("failed to build livesplit-core!", level=ERROR)
 
 
-modules = [
-    Extension(name + ".*",
-              ["livesplit_cy/" + name + "/*.pyx"],
-              include_dirs=["include", "."],
-              libraries=["livesplit_core"],
-              library_dirs=["lib"])
-    for name in find_packages("livesplit_cy")
+# A representation of livesplit-cy's packages and modules in the following
+# format: List[(name: str, sources: List[str])]
+PACKAGES = [
+    ("component", []),
+    ("layout", [
+        "component",
+        "layout"
+    ]),
+    ("run", [
+        "run",
+        "segment"
+    ]),
+    ("time", [
+        "atomic_date_time",
+        "time_span",
+        "time"
+    ]),
+    ("timer", [
+        "shared_timer",
+        "timer"
+    ])
 ]
 
-setup(cmdclass={"build_core": BuildCoreCommand},
-      ext_modules=cythonize(modules,
-                            build_dir="build",
-                            include_path=["include", "."]))
+# A representation of this package's statically linked dependencies in the
+# following format: List[(name: str, path: str, include path: str)]
+STATIC_LIBS = [
+    (
+        "livesplit_core",
+        BuildCoreCommand.RELEASE_PATH,
+        BuildCoreCommand.BINDINGS_PATH
+    )
+]
+
+
+def parse_libs():
+    """Parse STATIC_LIBS into kwargs for setuptools Extensions."""
+    if sys.platform == "win32":
+        libraries, library_dirs = [], []
+        include_dirs = ["include"]
+        for name, ldir, idir in STATIC_LIBS:
+            libraries.append(name)
+            library_dirs.append(ldir)
+            include_dirs.append(idir)
+        return {
+            "libraries": libraries,
+            "library_dirs": library_dirs,
+            "include_dirs": include_dirs
+        }
+    else:
+        extra_objects = []
+        include_dirs = ["include"]
+        for name, ldir, idir in STATIC_LIBS:
+            extra_objects.append(os.path.join(ldir, "lib{}.a".format(name)))
+            include_dirs.append(idir)
+        return {
+            "extra_objects": extra_objects,
+            "include_dirs": include_dirs
+        }
+
+
+def parse_packages(library_args, cython=False):
+    """Parse PACKAGES into setuptools Extensions."""
+    def parse_one(module):
+        name, sources = module
+        fullname = "livesplit_cy." + name
+        source_dir = "" if cython else "src."
+        package_path = os.path.join(*(source_dir + fullname).split("."))
+        ext = ".pyx" if cython else ".c"
+
+        return [
+            Extension(fullname + "." + source,
+                      [os.path.join(package_path, source + ext)],
+                      **library_args)
+            for source in sources
+        ]
+
+    return sum(map(parse_one, filter(None, PACKAGES)), [])
+
+
+def main():
+    """Run cythonized setup if available, else build setup from C sources."""
+    try:
+        from Cython.Build import cythonize
+        libs = parse_libs()
+        setup(cmdclass={"build_core": BuildCoreCommand},
+              ext_modules=cythonize(parse_packages(libs, cython=True),
+                                    build_dir="src",
+                                    include_path=libs["include_dirs"]))
+    except ImportError:
+        setup(cmdclass={"build_core": BuildCoreCommand},
+              ext_modules=parse_packages(parse_libs()))
+
+
+if __name__ == "__main__":
+    main()
